@@ -650,3 +650,118 @@ describe("CommandRouter", () => {
     expect(stopResponse.ok).toBe(true);
   });
 });
+
+describe("runtime recovery daemon authority", () => {
+  it("reports every existing runtime owner, even when the server calls it error", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/env-router" });
+    const router = createRouter(harness);
+    await runRouterCommand({
+      router,
+      requestId: "live-start",
+      command: createTurnSubmitCommand(),
+    });
+    const response = await runRouterCommand({
+      router,
+      requestId: "probe-live",
+      command: {
+        type: "thread.recovery.inspect",
+        threadId: "thread-router",
+        environmentId: "env-router",
+      },
+    });
+    expect(response).toMatchObject({ ok: true, result: { token: null } });
+  });
+  it("consumes the absent-runtime token once through the actual router", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/env-router" });
+    const router = createRouter(harness);
+    const response = await runRouterCommand({
+      router,
+      requestId: "probe-empty",
+      command: {
+        type: "thread.recovery.inspect",
+        threadId: "thread-router",
+        environmentId: "env-router",
+      },
+    });
+    if (!response.ok) throw new Error("inspection failed");
+    const { token } = parseHostDaemonCommandResultForCommand(
+      {
+        type: "thread.recovery.inspect",
+        threadId: "thread-router",
+        environmentId: "env-router",
+      },
+      response.result,
+    );
+    expect(token).toEqual(expect.any(String));
+    const command = { ...createTurnSubmitCommand(), recoveryToken: token! };
+    expect(
+      await runRouterCommand({ router, requestId: "recover-first", command }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await runRouterCommand({
+        router,
+        requestId: "recover-duplicate",
+        command,
+      }),
+    ).toMatchObject({
+      ok: false,
+      errorMessage: expect.stringContaining("recovery_fence_lost"),
+    });
+  });
+  it.each(["thread.recovery.cancel", "thread.stop"] as const)(
+    "fences asynchronous resume before provider input on %s arrival",
+    async (type) => {
+      const harness = createHarness({ workspacePath: "/tmp/env-router" });
+      const router = createRouter(harness);
+      const inspection = {
+        type: "thread.recovery.inspect" as const,
+        threadId: "thread-router",
+        environmentId: "env-router",
+      };
+      const response = await runRouterCommand({
+        router,
+        requestId: "probe-race",
+        command: inspection,
+      });
+      if (!response.ok) throw new Error("inspection failed");
+      const { token } = parseHostDaemonCommandResultForCommand(
+        inspection,
+        response.result,
+      );
+      const entered = createDeferredPromise<void>();
+      const release = createDeferredPromise<void>();
+      const original = harness.runtime.resumeThread;
+      harness.runtime.resumeThread = async (args) => {
+        entered.resolve();
+        await release.promise;
+        return original(args);
+      };
+      const run = runRouterCommand({
+        router,
+        requestId: "recover-race",
+        command: { ...createTurnSubmitCommand(), recoveryToken: token! },
+      });
+      await entered.promise;
+      const cancel = runRouterCommand({
+        router,
+        requestId: "cancel-race",
+        command:
+          type === "thread.stop"
+            ? {
+                type,
+                intent: "interrupt",
+                threadId: "thread-router",
+                environmentId: "env-router",
+              }
+            : { type, threadId: "thread-router", environmentId: "env-router" },
+      });
+      release.resolve();
+      expect(await run).toMatchObject({
+        ok: false,
+        errorMessage: expect.stringContaining("recovery_fence_lost"),
+      });
+      expect(await cancel).toMatchObject({ ok: true });
+      expect(harness.runtimeState.ranTurnInput).toBeUndefined();
+    },
+  );
+});

@@ -1,3 +1,4 @@
+import { cancelRuntimeRecoveryForThread } from "../threads/runtime-recovery-cancel.js";
 import {
   createPendingInteraction,
   getActivePendingInteractionForThread,
@@ -738,6 +739,11 @@ export class PendingInteractionLifecycle {
       throw buildResolveConflictError(current);
     }
     validatePendingInteractionResolution(current, args.resolution);
+    cancelRuntimeRecoveryForThread(
+      this.deps,
+      args.threadId,
+      "interaction-resolved",
+    );
 
     const updated = this.queueInteractionResolutionCommand({
       interaction: current,

@@ -201,6 +201,7 @@ async function resumeThreadRuntimeIfMissing(
     command.resumeContext.bridgeLaunch ?? command.bridgeLaunch,
     options,
   );
+  options.recoveryPreflight?.();
   await entry.runtime.resumeThread({
     bridgeLaunch,
     skillRoots: entry.skillRoots,
@@ -241,6 +242,7 @@ export async function startThread(
       command,
       options,
     );
+    options.recoveryPreflight?.();
     const result = await entry.runtime.startThread({
       bridgeLaunch,
       skillRoots: entry.skillRoots,
@@ -445,8 +447,10 @@ async function resolveSubmittedTurnTarget(
 async function deliverSubmittedTurn(
   command: TurnSubmitCommand,
   entry: RuntimeEntry,
+  preflight?: () => void,
 ): Promise<void> {
   const resolvedTurnId = await resolveSubmittedTurnTarget(command, entry);
+  preflight?.();
   if (command.target.mode === "start" || resolvedTurnId === null) {
     return runSubmittedTurn(command, entry);
   }
@@ -475,7 +479,8 @@ export async function submitTurn(
       entry,
       options,
     });
-    await deliverSubmittedTurn(stagedCommand, entry);
+    options.recoveryPreflight?.();
+    await deliverSubmittedTurn(stagedCommand, entry, options.recoveryPreflight);
   } catch (error) {
     await cleanupAfterPostStagingFailure(staged.cleanup);
     throw error;

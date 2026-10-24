@@ -1,3 +1,7 @@
+import {
+  prepareRuntimeRecoveryDispatch,
+  runtimeRecoveryQueueGuard,
+} from "./runtime-recovery.js";
 import { requestQueuedMachineReadiness } from "./queued-message-dispatch.js";
 import {
   cancelPreparingMachinePause,
@@ -309,6 +313,10 @@ async function runDispatchAttempt(
   reattempted: boolean,
 ): Promise<DispatchAttemptOutcome> {
   const { thread } = args;
+  const recoveryMarker =
+    args.queuePayload.kind === "retry"
+      ? args.queuePayload.runtimeRecovery
+      : undefined;
   let { payload } = args;
   // A stopping thread is writable HERE and nowhere upstream: the checkpoint
   // below turns it into a core wait, which is a truthful "not yet" the row can
@@ -403,6 +411,9 @@ async function runDispatchAttempt(
       waitingOn,
       sendAt,
       claimed,
+      ...(recoveryMarker
+        ? runtimeRecoveryQueueGuard(deps, thread.id, recoveryMarker)
+        : {}),
     });
     if (entry === null) {
       // The row vanished under a re-queue (the user deleted it). Nothing is
@@ -624,14 +635,31 @@ async function runDispatchAttempt(
 
   markTurnTraceSpan("dispatch.checkpoint.done");
   const environment = await requireThreadCommandEnvironment(deps, { thread });
+  if (recoveryMarker && claimed !== null && claimed.length !== 1)
+    throw new ApiError(
+      409,
+      "recovery_grouped",
+      "Recovery must not combine with another input",
+    );
+  const recovery = recoveryMarker
+    ? await prepareRuntimeRecoveryDispatch(deps, thread.id, recoveryMarker)
+    : null;
   try {
     await sendThreadMessage(deps, {
       environment,
+      ...(recovery
+        ? {
+            recoveryToken: recovery.token,
+            recoveryBeforeSend: recovery.beforeSend,
+            recoverySettled: recovery.settled,
+          }
+        : {}),
       payload: resolvedPayload,
       thread,
       trigger: args.trigger,
       ...(args.retryOf !== undefined ? { retryOf: args.retryOf } : {}),
       beforeAppendInTransaction: ({ tx }) => {
+        recovery?.beforeAppend(tx);
         if (getThread(tx, thread.id)?.status !== thread.status) {
           throw new DispatchThreadStatusChangedError();
         }

@@ -1,3 +1,4 @@
+import { cancelRuntimeRecoveryForThread } from "../../services/threads/runtime-recovery.js";
 import { refreshProviderRetirement } from "../../services/environments/environment-engine.js";
 import {
   deleteQueuedThreadMessage,
@@ -235,6 +236,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
 
   post(routes.createQueuedMessage, async (context, payload) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
+    cancelRuntimeRecoveryForThread(deps, thread.id, "new-queued-input");
     const queuedMessage = await createQueuedMessageForThread(deps, {
       payload,
       thread,
@@ -290,6 +292,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   patch(routes.updateQueuedMessage, async (context, payload) => {
+    cancelRuntimeRecoveryForThread(
+      deps,
+      context.req.param("id"),
+      "queued-input-edited",
+    );
     const thread = requirePublicThread(deps.db, context.req.param("id"));
     ensureThreadQueueIsWritable(thread);
     const input = await resolvePromptAttachmentReferences({
@@ -359,6 +366,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (!queuedMessage || queuedMessage.threadId !== context.req.param("id")) {
       throw new ApiError(404, "invalid_request", "Queued message not found");
     }
+    cancelRuntimeRecoveryForThread(
+      deps,
+      queuedMessage.threadId,
+      "queue-canceled",
+    );
     const deleted = deleteQueuedThreadMessage(
       deps.db,
       deps.hub,

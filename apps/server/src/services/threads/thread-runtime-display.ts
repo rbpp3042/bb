@@ -1,3 +1,4 @@
+import { readRecovery, readRecoveryHost } from "./runtime-recovery-store.js";
 import {
   getEnvironment,
   getSessionById,
@@ -336,8 +337,26 @@ export function toThreadResponseFromThread(
     ...args,
     environmentHostId: resolveThreadEnvironmentHostId(deps, args.thread),
   });
+  const recovery = readRecovery(deps.db, args.thread.id);
+  const recoveryHost = recovery
+    ? readRecoveryHost(deps.db, recovery.hostId)
+    : null;
   return {
     ...threadWithRuntime,
+    experimental_runtimeRecovery: {
+      mode: recovery?.mode ?? "off",
+      decision: recovery?.decision ?? "not-opted-in",
+      attempts: recovery?.attempts.length ?? 0,
+      generation: recovery?.generation ?? 0,
+      notBefore: recovery?.openedAt ? recovery.notBefore : null,
+      expiresAt: recovery?.openedAt ? recovery.openedAt + 1800_000 : null,
+      hostStableAfter:
+        recoveryHost?.sessionId && recoveryHost.connectedAt
+          ? Math.max(recoveryHost.connectedAt, recoveryHost.reconciledAt) +
+            60_000
+          : null,
+      hostBlockedUntil: recoveryHost?.blockedUntil || null,
+    },
     activeBackgroundAgentCount:
       listActiveBackgroundTaskCountsByThreadIds(deps.db, {
         threadIds: [args.thread.id],

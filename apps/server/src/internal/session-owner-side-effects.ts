@@ -1,7 +1,12 @@
+import {
+  connectRecoveryHost,
+  reconcileRecoveryHost,
+} from "../services/threads/runtime-recovery-store.js";
 import { eq } from "drizzle-orm";
 import {
   closeSession,
   hostDaemonSessions,
+  getLatestSessionForHost,
   listActiveHostThreads,
   listHostThreadIds,
   type HostDaemonSessionRow,
@@ -118,6 +123,16 @@ export async function handleHostSessionOpened(
     sameDaemonInstance,
     undeliveredEventThreadIds: args.undeliveredEventThreadIds,
   });
+  if (
+    getLatestSessionForHost(deps.db, { hostId: args.hostId })?.id ===
+    args.openedSession.id
+  )
+    reconcileRecoveryHost(
+      deps.db,
+      args.hostId,
+      args.openedSession.id,
+      Date.now(),
+    );
 }
 
 export function handleDaemonSocketClosed(
@@ -135,6 +150,9 @@ export function handleDaemonSocketOpened(
   deps: Pick<AppDeps, "db" | "hub" | "providerRegistry">,
   args: { hostId: string },
 ): void {
+  const sessionId = deps.hub.getDaemonSessionIdForHost(args.hostId);
+  if (sessionId)
+    connectRecoveryHost(deps.db, args.hostId, sessionId, Date.now());
   notifyHostThreadRuntimeStatusChanged(deps, args.hostId);
 }
 
@@ -172,6 +190,7 @@ function handleDaemonSessionLost(
     sessionId: args.sessionId,
   });
 
+  reconcileRecoveryHost(deps.db, session.hostId, null, Date.now());
   closeSession(deps.db, deps.hub, args.sessionId, args.reason);
 
   notifyHostThreadRuntimeStatusChanged(deps, session.hostId);

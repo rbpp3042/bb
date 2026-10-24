@@ -1,3 +1,4 @@
+import { cancelRuntimeRecoveryForThread } from "./runtime-recovery-cancel.js";
 import {
   cancelProviderEnvironmentCreation,
   sweepProviderEnvironment,
@@ -55,6 +56,7 @@ function archiveThreadWithLifecycleEffects(
   deps: AppDeps,
   args: ArchiveThreadWithLifecycleEffectsArgs,
 ): Thread | null {
+  cancelRuntimeRecoveryForThread(deps, args.thread.id, "archived");
   const archivedThread = archiveThreadAndReleaseChildren(deps, {
     threadId: args.thread.id,
   });
@@ -139,10 +141,14 @@ function archiveThreadTrees(
   ) => ArchiveThreadEnvironment | null,
 ): string[] {
   const threads = listArchiveCandidates(deps.db, roots);
-  for (const root of roots) archiveThread(deps.db, deps.hub, root.id);
+  for (const root of roots) {
+    cancelRuntimeRecoveryForThread(deps, root.id, "archived");
+    archiveThread(deps.db, deps.hub, root.id);
+  }
   const archivedThreadIds: string[] = [];
 
   for (const thread of threads) {
+    cancelRuntimeRecoveryForThread(deps, thread.id, "archived");
     if (thread.deletedAt !== null) continue;
     if (thread.archivedAt !== null) {
       if (!archiveUndoGraceKeepsTurnRunning(thread, Date.now()))

@@ -1,3 +1,5 @@
+import { cancelRuntimeRecoveryForThread } from "../services/threads/runtime-recovery.js";
+import { z } from "zod";
 import { performance } from "node:perf_hooks";
 import { Buffer } from "node:buffer";
 import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
@@ -460,7 +462,15 @@ async function applyEventEffects(
         continue;
       }
 
+      if (event.type === "thread/goal/updated" && event.status === "paused")
+        cancelRuntimeRecoveryForThread(deps, entry.threadId, "goal-paused");
       if (event.type === "thread/extensionState/updated") {
+        if (
+          event.kind.endsWith("/goal") &&
+          z.object({ status: z.string() }).safeParse(event.payload).data
+            ?.status === "paused"
+        )
+          cancelRuntimeRecoveryForThread(deps, entry.threadId, "goal-paused");
         if (event.kind === THREAD_SESSION_OPTIONS_STATE_KIND) {
           dropSettledThreadSessionOptionSelections(deps, {
             threadId: entry.threadId,

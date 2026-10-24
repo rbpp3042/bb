@@ -464,6 +464,13 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage | null> {
+  if (
+    args.queuedMessages.some((row) => {
+      const payload = toThreadQueuedMessage(row).payload;
+      return payload.kind === "retry" && payload.runtimeRecovery;
+    })
+  )
+    return null;
   if (args.mode !== "auto") {
     return null;
   }
@@ -694,6 +701,17 @@ async function sendClaimedQueuedMessageForThread(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage> {
+  const recoveryRows = args.queuedMessages
+    .map(toThreadQueuedMessage)
+    .filter(
+      (row) => row.payload.kind === "retry" && row.payload.runtimeRecovery,
+    );
+  if (recoveryRows.length > 0 && args.queuedMessages.length !== 1)
+    throw new ApiError(
+      409,
+      "recovery_grouped",
+      "Recovery must not combine with another input",
+    );
   const notice = await sendClaimedSystemNotice(deps, args);
   if (notice) {
     return notice;

@@ -33,6 +33,7 @@ import {
 export const LIVE_DAEMON_COMMAND_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 interface RunLiveHostCommandArgs<TType extends HostDaemonSettledCommandType> {
+  beforeSend?: () => void;
   command: Extract<HostDaemonCommand, { type: TType }>;
   execution?: HostDaemonCommandExecutionRecord;
   hostId: string;
@@ -57,6 +58,8 @@ interface StartLiveHostCommandArgs<
   TType extends HostDaemonSettledCommandType,
 > extends RunLiveHostCommandArgs<TType> {
   onError?: LiveHostCommandErrorHandler<TType>;
+  onSuccess?: () => void;
+  onFailure?: () => void;
   onSettled?: () => void | Promise<void>;
 }
 
@@ -255,6 +258,7 @@ export async function runLiveHostCommand<
     };
     noteTurnTraceCommandSent({ command: sourceCommand, hostId: args.hostId });
     const result = await call(deps, {
+      beforeSend: args.beforeSend,
       command,
       hostId: args.hostId,
       timeoutMs: args.timeoutMs,
@@ -316,6 +320,15 @@ export function startLiveHostCommand<
   const execution =
     args.execution ?? createLiveHostCommandExecution(args.hostId);
   void runLiveHostCommand(deps, { ...args, execution })
+    .then(
+      () => {
+        args.onSuccess?.();
+      },
+      (error) => {
+        args.onFailure?.();
+        throw error;
+      },
+    )
     .catch((error) => {
       const normalized =
         error instanceof Error ? error : new Error(String(error));

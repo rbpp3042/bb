@@ -847,6 +847,7 @@ export function createQueuedThreadMessageInTransaction(
       retryAttempt:
         input.payload.kind === "retry" ? input.payload.attempt : null,
       retryReason: input.payload.kind === "retry" ? input.payload.reason : null,
+      runtimeRecovery: input.payload.kind === "retry" && input.payload.runtimeRecovery ? JSON.stringify(input.payload.runtimeRecovery) : null,
       groupWithNext: false,
       claimedAt: null,
       claimToken: null,

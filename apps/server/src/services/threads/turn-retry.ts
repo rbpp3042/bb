@@ -86,6 +86,7 @@ function requireFailedTurn(
 export interface RetryFailedTurnArgs {
   thread: Thread;
   request: RetryTurnRequest;
+  recovery?: { generation: number; expectedRequestId: string };
 }
 
 const CONTINUE_ACCEPTED_TURN_TEXT = "Please continue.";
@@ -220,6 +221,7 @@ export async function retryFailedTurn(
       source: { kind: "inline" },
       queuePayload: {
         kind: "retry",
+        ...(args.recovery ? { runtimeRecovery: args.recovery } : {}),
         retryOfTurnRequestId: originalRequestId,
         attempt,
         reason: request.reason,

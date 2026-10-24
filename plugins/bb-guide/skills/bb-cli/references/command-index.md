@@ -347,3 +347,8 @@ This index lists every command path that the core CLI registers, including alias
 - `bb browser watch`
 - `bb browser import-sources`
 - `bb browser import-cookies`
+
+`bb thread update <thread-id> --runtime-recovery read-only|off` changes the
+experimental grant for the current task. It defaults to off, requires protocol
+253 and supports read-only tasks only. Change it separately from other settings.
+Never enable it to resolve an unknown external write or a live stalled runtime.

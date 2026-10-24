@@ -1118,6 +1118,22 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         ],
       },
       {
+        id: "runtime-recovery",
+        title: "Read-only runtime recovery",
+        summary:
+          "Opt an existing read-only task into bounded core recovery after confirmed daemon runtime loss.",
+        bullets: [
+          "Off by default; requires an explicit grant for the current task and host protocol 253",
+          "Uses native retry, daemon absence fencing and durable budgets",
+          "Manual Stop and new input cancel the grant; unknown outcomes require an operator",
+        ],
+        apiSymbols: [
+          "UpdateThreadRequest.experimental_runtimeRecovery",
+          "ThreadResponse.experimental_runtimeRecovery",
+        ],
+        experimental: true,
+      },
+      {
         id: "thread-events",
         tagline: "React when threads and environments change",
         title: "Lifecycle events",

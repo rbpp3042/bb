@@ -3643,3 +3643,17 @@ Docs: `providers.md`.
 
 Before stabilization, decide whether `model/list` `supportedServiceTiers` may
 override the icon and whether reasoning levels should render it.
+
+## `UpdateThreadRequest.experimental_runtimeRecovery`
+
+`threads.update({ threadId, experimental_runtimeRecovery: "read-only" | "off" })`
+opts the current task into core runtime recovery, or cancels its grant. The
+field must be changed separately from other settings. This is off by default,
+requires host protocol 253, and never authorizes writes or automatic Stop.
+Thread JSON exposes mode, decision, attempts and cancellation generation.
+
+Docs: `backend-sdk.md`, runtime recovery section.
+
+Before stabilization, audit cancellation at every lifecycle seam, mixed-version
+upgrades, unknown ACK reconciliation and the read-only consent boundary. Keep
+operator supervision and a separate pilot decision until those audits finish.

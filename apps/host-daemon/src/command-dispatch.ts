@@ -448,6 +448,10 @@ async function readAvailableWorkspace<TAvailable extends object>(
 }
 
 const commandHandlers: CommandHandlerMap = {
+  "thread.recovery.cancel": async () => ({}),
+  "thread.recovery.inspect": async () => {
+    throw new Error("Must be routed by CommandRouter");
+  },
   "thread.rewind.discard": (command, options) =>
     withRetainedThreadEnvironment(command, options, () =>
       discardThreadRewind(command, options),

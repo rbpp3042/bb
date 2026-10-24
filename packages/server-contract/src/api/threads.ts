@@ -547,6 +547,18 @@ export const threadSearchResponseSchema = z
 export type ThreadSearchResponse = z.infer<typeof threadSearchResponseSchema>;
 
 export const threadResponseSchema = threadWithRuntimeSchema.extend({
+  experimental_runtimeRecovery: z
+    .object({
+      mode: z.enum(["off", "read-only"]),
+      decision: z.string(),
+      attempts: z.number().int(),
+      generation: z.number().int(),
+      notBefore: z.number().nullable(),
+      expiresAt: z.number().nullable(),
+      hostStableAfter: z.number().nullable(),
+      hostBlockedUntil: z.number().nullable(),
+    })
+    .optional(),
   activeBackgroundAgentCount: z.number().int().nonnegative(),
   /**
    * Whether `POST /threads/:id/restore-environment` would build this thread a
@@ -766,6 +778,7 @@ export type DeleteThreadRequest = z.infer<typeof deleteThreadRequestSchema>;
 
 export const updateThreadRequestSchema = z
   .object({
+    experimental_runtimeRecovery: z.enum(["off", "read-only"]),
     title: z.string().min(1).nullable(),
     sectionId: z.string().min(1).nullable(),
     parentThreadId: z.string().min(1).nullable(),
@@ -781,6 +794,7 @@ export const updateThreadRequestSchema = z
   .partial()
   .refine(
     (value) =>
+      value.experimental_runtimeRecovery !== undefined ||
       value.parentNotifications !== undefined ||
       value.title !== undefined ||
       value.sectionId !== undefined ||
@@ -790,6 +804,15 @@ export const updateThreadRequestSchema = z
       value.sessionOptions !== undefined ||
       value.visibility !== undefined,
     "At least one field must be provided",
+  )
+  .refine(
+    (value) =>
+      value.experimental_runtimeRecovery === undefined ||
+      Object.entries(value).every(
+        ([key, field]) =>
+          key === "experimental_runtimeRecovery" || field === undefined,
+      ),
+    "Change runtime recovery separately from other thread settings",
   );
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 

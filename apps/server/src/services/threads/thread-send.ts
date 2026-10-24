@@ -96,6 +96,9 @@ type SendThreadMessagePayload = SendMessageRequest & {
 };
 
 interface SendThreadMessageArgs {
+  recoveryToken?: string;
+  recoveryBeforeSend?: (requestId: string) => void;
+  recoverySettled?: (success: boolean) => void;
   beforeAppendInTransaction?: SendThreadMessageTransactionPreflight;
   /**
    * Present only when this send re-submits a failed turn. Marks the turn event
@@ -731,7 +734,15 @@ async function sendThreadMessageWithoutContextClear(
       queuedRequest.request.notificationMetadata,
     );
     startLiveHostCommand(deps, {
-      command: command.command,
+      command: {
+        ...command.command,
+        ...(args.recoveryToken ? { recoveryToken: args.recoveryToken } : {}),
+      },
+      beforeSend: args.recoveryBeforeSend
+        ? () => args.recoveryBeforeSend!(requestId)
+        : undefined,
+      onSuccess: () => args.recoverySettled?.(true),
+      onFailure: () => args.recoverySettled?.(false),
       hostId: readyEnvironment.hostId,
       timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
       ...(args.historyReplacement?.onCommandSettled !== undefined

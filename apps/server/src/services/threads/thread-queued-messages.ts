@@ -1,5 +1,6 @@
 import {
   promptInputSchema,
+  runtimeRecoveryMarkerSchema,
   queuedMessageWaitingOnSchema,
   threadQueuedMessageSchema,
 } from "@bb/domain";
@@ -33,6 +34,7 @@ interface StoredQueuedThreadMessageRow {
   retryAttempt: number | null;
   retryOfTurnRequestId: string | null;
   retryReason: string | null;
+  runtimeRecovery?: string | null;
   permissionMode: PermissionMode;
   sendAt: number | null;
   serviceTier: string;
@@ -154,6 +156,13 @@ function toQueuedMessagePayload(
     retryOfTurnRequestId: row.retryOfTurnRequestId,
     attempt: row.retryAttempt,
     reason: row.retryReason,
+    ...(row.runtimeRecovery
+      ? {
+          runtimeRecovery: runtimeRecoveryMarkerSchema.parse(
+            JSON.parse(row.runtimeRecovery),
+          ),
+        }
+      : {}),
   };
 }
 

@@ -359,3 +359,39 @@ code: "forbidden", message: "Only the connect plugin can call this method" })`
 from `@get-bb/plugin-sdk`. `bb.sdk.plugins.callRpc` rejects with a `BbHttpError`
 whose `code` is `forbidden` and `status` is 403. See `backend-events.md` for
 the refusal codes, optional validation issues and mutation rollback behavior.
+
+### Experimental read-only runtime recovery
+
+An operator may explicitly opt an existing task in with
+`threads.update({ threadId, experimental_runtimeRecovery: "read-only" })`.
+Use `"off"` to cancel. Change this field separately from other settings. The CLI
+is `bb thread update <thread-id> --runtime-recovery read-only|off`.
+Default is off; grants belong to the current original request, not future tasks.
+Do not opt a task in merely because its display status is error.
+
+Core requires a confirmed daemon-loss interruption, completed reconcile,
+60 seconds of stable connection, an authoritative absent-runtime probe and
+one-use daemon fencing (protocol 253). It uses native retry and dispatch hooks,
+including concurrency-limit. Accepted input receives the current native
+continuation; the original prompt is not appended a second time. Native
+provider failures/retry queues remain owned by provider-retry or the operator.
+
+At most two reservations are allowed in a fixed 30-minute episode, delayed
+60/180 seconds plus 0–30 seconds jitter from each interruption. Reservations,
+cancellation generations and host ownership survive restarts. Unknown ACKs
+hold admission for operator review; expiration never implies safe dispatch.
+Stop, new input, queue cancellation, archive/delete, goal pause and interaction
+resolution revoke the grant. Regranting the same canceled task is refused.
+
+Only read-only work is supported. A grant does not make writes, payments,
+messages or deploys idempotent. Unknown external outcomes need a durable
+operation ledger and receiver read-back; without that contract, use an
+operator. Stall detection never stops or restarts a runtime.
+
+Version one additionally requires read-only event evidence from the original
+request. Opaque shell/tool calls, file writes, background/delegated work and
+unhandled provider events require an operator even when their last visible
+status says completed. An unresolved compaction also blocks admission. The
+mode is an explicit operator attestation, not a new provider permission mode.
+JSON status includes notBefore, expiresAt, hostStableAfter and hostBlockedUntil
+so queue delays and circuit holds can be explained without dispatching.

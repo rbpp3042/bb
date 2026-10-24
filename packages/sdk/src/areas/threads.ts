@@ -759,6 +759,7 @@ function countQuery(args: ThreadCountArgs | undefined): ThreadCountQuery {
 
 function updateJson(args: ThreadUpdateArgs): UpdateThreadRequest {
   return {
+    experimental_runtimeRecovery: args.experimental_runtimeRecovery,
     title: args.title,
     sectionId: args.sectionId,
     parentThreadId: args.parentThreadId,

@@ -1,3 +1,4 @@
+import { cancelRuntimeRecoveryForThread } from "./runtime-recovery.js";
 import {
   isStandaloneBuiltinClearCommand,
   isStandaloneBuiltinCompactCommand,
@@ -24,6 +25,7 @@ export async function acceptThreadSendRequest(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: AcceptThreadSendRequestArgs,
 ): Promise<SendMessageResponse> {
+  cancelRuntimeRecoveryForThread(deps, args.thread.id, "new-input");
   assertThreadHostAcceptsWork(deps.db, args.thread);
   const { compactFirst, ...request } = args.payload;
   if (isStandaloneBuiltinClearCommand(request.input)) {

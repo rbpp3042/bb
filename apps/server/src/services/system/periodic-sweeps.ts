@@ -1,3 +1,4 @@
+import { sweepRuntimeRecovery } from "../threads/runtime-recovery.js";
 import {
   runThreadPruningSweep,
   THREAD_PRUNING_SWEEP_LIMITS,
@@ -527,6 +528,12 @@ export function createThreadEventPruningJob(
 }
 
 const PERIODIC_SWEEP_JOBS: PeriodicSweepJob[] = [
+  {
+    name: "runtime-recovery",
+    category: "durable-intent-retry",
+    cadenceMs: 5000,
+    run: sweepRuntimeRecovery,
+  },
   {
     cadenceMs: 0,
     category: "durable-intent-retry",

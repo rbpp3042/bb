@@ -291,6 +291,7 @@ const threadStartCommandSchema = hostDaemonThreadTargetSchema
   .merge(hostDaemonThreadRuntimeContextSchema)
   .extend({
     type: z.literal("thread.start"),
+    recoveryToken: z.string().min(1).optional(),
     requestId: clientTurnRequestIdSchema,
     input: z.array(promptInputSchema),
     inputGroups: z.array(z.array(promptInputSchema).min(1)).min(1).optional(),
@@ -349,6 +350,7 @@ export type TurnSubmitTarget = z.infer<typeof turnSubmitTargetSchema>;
 const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
   .extend({
     type: z.literal("turn.submit"),
+    recoveryToken: z.string().min(1).optional(),
     requestId: clientTurnRequestIdSchema,
     input: z.array(promptInputSchema).min(1),
     inputGroups: z.array(z.array(promptInputSchema).min(1)).min(1).optional(),
@@ -1546,6 +1548,28 @@ export const hostDaemonCommandRegistry = {
     type: "turn.submit",
     schema: turnSubmitCommandSchema,
     resultSchema: turnSubmitResultSchema,
+    transport: "settled",
+    retryable: false,
+    flushEventsBeforeResult: true,
+    envLane: "read",
+  }),
+  "thread.recovery.cancel": defineHostDaemonCommandDescriptor({
+    type: "thread.recovery.cancel",
+    schema: hostDaemonThreadTargetSchema
+      .extend({ type: z.literal("thread.recovery.cancel") })
+      .strict(),
+    resultSchema: z.object({}).strict(),
+    transport: "settled",
+    retryable: false,
+    flushEventsBeforeResult: true,
+    envLane: null,
+  }),
+  "thread.recovery.inspect": defineHostDaemonCommandDescriptor({
+    type: "thread.recovery.inspect",
+    schema: hostDaemonThreadTargetSchema
+      .extend({ type: z.literal("thread.recovery.inspect") })
+      .strict(),
+    resultSchema: z.object({ token: z.string().nullable() }).strict(),
     transport: "settled",
     retryable: false,
     flushEventsBeforeResult: true,

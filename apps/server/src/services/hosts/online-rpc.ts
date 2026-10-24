@@ -10,6 +10,7 @@ import {
 import { randomUUID } from "node:crypto";
 import {
   hostDaemonSupportsEnvironmentCleanupInspection,
+  HOST_DAEMON_RUNTIME_RECOVERY_PROTOCOL_VERSION,
   type HostDaemonOnlineRpcResponseMessage,
   type HostDaemonOnlineRpcResultForCommand,
   type HostDaemonRetryableOnlineRpcCommand,
@@ -34,6 +35,7 @@ const HOST_DAEMON_REGISTRATION_WAIT_MS = 1_000;
 const HOST_DAEMON_RECONNECT_WAIT_MS = 5_000;
 
 interface CallHostOnlineRpcArgs<TCommand extends HostDaemonRpcCommand> {
+  beforeSend?: () => void;
   command: TCommand;
   hostId: string;
   signal?: AbortSignal;
@@ -371,6 +373,23 @@ function requestHostOnlineRpcResponse(
   deps: Pick<WorkSessionDeps, "hub" | "db">,
   args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
 ): Promise<HostDaemonOnlineRpcResponseMessage> {
+  if (
+    args.command.type === "thread.recovery.inspect" ||
+    args.command.type === "thread.recovery.cancel" ||
+    ("recoveryToken" in args.command &&
+      args.command.recoveryToken !== undefined)
+  ) {
+    const id = deps.hub.getDaemonSessionIdForHost(args.hostId);
+    const session = id ? getSessionById(deps.db, { sessionId: id }) : null;
+    if (!session || session.protocolVersion < HOST_DAEMON_RUNTIME_RECOVERY_PROTOCOL_VERSION)
+      return Promise.reject(
+        new ApiError(
+          409,
+          "runtime_recovery_upgrade_required",
+          "Runtime recovery requires a protocol 253 daemon",
+        ),
+      );
+  }
   if (args.command.type === "environment.inspect_cleanup") {
     const sessionId = deps.hub.getDaemonSessionIdForHost(args.hostId);
     const session = sessionId ? getSessionById(deps.db, { sessionId }) : null;
@@ -386,6 +405,7 @@ function requestHostOnlineRpcResponse(
         ),
       );
   }
+  args.beforeSend?.();
   return traceTurnRpc(args.command.type, () =>
     deps.hub.requestHostOnlineRpc({
       hostId: args.hostId,

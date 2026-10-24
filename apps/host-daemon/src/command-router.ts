@@ -10,6 +10,7 @@ import type {
   HostDaemonRpcResultForCommand,
   HostDaemonCommandEnvironmentLane,
 } from "@bb/host-daemon-contract";
+import { RecoveryFence } from "./recovery-fence.js";
 import { performance } from "node:perf_hooks";
 import {
   hostDaemonEnvironmentLaneForCommand,
@@ -93,6 +94,7 @@ function elapsedMs(startedAtMs: number): number {
 
 export class CommandRouter {
   private readonly logger;
+  private readonly recoveryFence = new RecoveryFence();
   private readonly environmentLanes = new Map<string, ReadWriteLaneState>();
   private readonly threadUnarchiveBarriers = new Map<string, Promise<void>>();
   private readonly threadLaneTails = new Map<string, Promise<void>>();
@@ -226,6 +228,15 @@ export class CommandRouter {
   private executeLiveDaemonCommand(
     command: HostDaemonCommand,
   ): Promise<HostDaemonCommandResultForCommand> {
+    const recoveryGeneration =
+      "threadId" in command && command.type !== "thread.recovery.inspect"
+        ? this.recoveryFence.begin(
+            command.threadId,
+            "recoveryToken" in command ? command.recoveryToken : undefined,
+          )
+        : "threadId" in command
+          ? this.recoveryFence.version(command.threadId)
+          : null;
     const environmentLaneMode = hostDaemonEnvironmentLaneForCommand(command);
     const threadLaneKey = this.resolveThreadLaneKey(command);
     const task = this.runAfterThreadUnarchiveBarrier(command, () =>
@@ -234,7 +245,7 @@ export class CommandRouter {
           command,
           environmentLaneMode,
           threadLaneKey,
-          () => this.executeLiveDaemonCommandBody(command),
+          () => this.executeLiveDaemonCommandBody(command, recoveryGeneration),
         ),
       ),
     );
@@ -244,9 +255,45 @@ export class CommandRouter {
 
   private async executeLiveDaemonCommandBody(
     command: HostDaemonCommand,
+    recoveryGeneration: number | null,
   ): Promise<HostDaemonCommandResultForCommand> {
     markTurnSubmitTraceSpan("lanes.entered");
-    const result = await dispatchCommand(command, this.createDispatchOptions());
+    const recoveryPreflight = () => {
+      if (
+        "recoveryToken" in command &&
+        command.recoveryToken !== undefined &&
+        recoveryGeneration !== null
+      ) {
+        this.recoveryFence.assertCurrent(command.threadId, recoveryGeneration);
+      }
+    };
+    recoveryPreflight();
+    if (
+      "recoveryToken" in command &&
+      command.recoveryToken !== undefined &&
+      this.options.runtimeManager.listThreadOwnerEntries(command.threadId)
+        .length > 0
+    )
+      throw new Error("recovery_runtime_present");
+    if (
+      command.type === "thread.recovery.inspect" &&
+      recoveryGeneration !== null
+    )
+      this.recoveryFence.assertCurrent(command.threadId, recoveryGeneration);
+    const result =
+      command.type === "thread.recovery.inspect"
+        ? {
+            token: this.recoveryFence.inspect(
+              command.threadId,
+              this.options.runtimeManager.listThreadOwnerEntries(
+                command.threadId,
+              ).length > 0,
+            ),
+          }
+        : await dispatchCommand(command, {
+            ...this.createDispatchOptions(),
+            recoveryPreflight,
+          });
     if (shouldFlushEventsBeforeReportingCommandResult(command)) {
       await this.options.eventSink.flush();
       markTurnSubmitTraceSpan("events.flushed");
@@ -452,6 +499,8 @@ export class CommandRouter {
       case "turn.submit":
       case "thread.archive":
       case "interactive.resolve":
+      case "thread.recovery.cancel":
+      case "thread.recovery.inspect":
       case "thread.stop":
       case "thread.storage.delete":
       case "thread.plan.cancel":

@@ -1,3 +1,7 @@
+import {
+  configureRuntimeRecovery,
+  cancelRuntimeRecoveryForThread,
+} from "../../services/threads/runtime-recovery.js";
 import { countUnarchivedThreadDescendants } from "../../services/threads/thread-archive.js";
 import { cancelAbandonedProviderCreations } from "../../services/threads/thread-environment-providers.js";
 import {
@@ -431,6 +435,14 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
 
   patch(routes.update, async (context, payload) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
+    if (payload.experimental_runtimeRecovery === "off")
+      cancelRuntimeRecoveryForThread(deps, thread.id, "opt-out");
+    else if (payload.experimental_runtimeRecovery !== undefined)
+      configureRuntimeRecovery(
+        deps.db,
+        thread,
+        payload.experimental_runtimeRecovery,
+      );
     if (payload.parentThreadId) {
       assertValidParentThread(deps, {
         childThreadId: thread.id,
@@ -534,6 +546,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     const dependents = listThreadDeletionTree(deps.db, thread.id);
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     for (const dependent of dependents) {
+      cancelRuntimeRecoveryForThread(deps, dependent.id, "deleted");
       const deleted = getThread(deps.db, dependent.id);
       if (!deleted) continue;
       if (dependent.deletedAt === null) emitPluginThreadDeleted(deleted);

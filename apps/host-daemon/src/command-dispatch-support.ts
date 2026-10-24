@@ -45,6 +45,7 @@ export type CommandOf<TType extends DispatchCommand["type"]> = Extract<
 >;
 
 export interface CommandDispatchOptions {
+  recoveryPreflight?: () => void;
   emitEnvironmentHookProgress?: (
     message: EnvironmentHookProgressMessage,
   ) => void;

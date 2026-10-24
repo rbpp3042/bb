@@ -44,6 +44,7 @@ import {
 import { SEND_AT_HELP, parseSendAt } from "./send-time.js";
 
 interface ThreadUpdateCommandOptions {
+  runtimeRecovery?: string;
   self?: boolean;
   json?: boolean;
   title?: string;
@@ -147,6 +148,7 @@ type PostThreadMessageResult = ThreadSendResult & {
 };
 
 interface ThreadUpdateBody {
+  experimental_runtimeRecovery?: "off" | "read-only";
   title?: string;
   sectionId?: string | null;
   parentThreadId?: string | null;
@@ -166,6 +168,10 @@ export function registerActionsCommands(
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--title <title>", "Set the thread title")
+    .option(
+      "--runtime-recovery <mode>",
+      "Opt in this existing read-only task: off or read-only",
+    )
     .option("--parent-thread <id>", "Set the parent thread id")
     .option("--clear-parent-thread", "Clear the parent thread id")
     .option("--section <id>", "Move the thread into a section")
@@ -200,6 +206,7 @@ export function registerActionsCommands(
             opts.parentNotifications,
           );
           if (
+            !opts.runtimeRecovery &&
             !opts.parentThread &&
             !opts.clearParentThread &&
             !opts.section &&
@@ -211,7 +218,7 @@ export function registerActionsCommands(
             !parentNotifications
           ) {
             throw new Error(
-              "No changes requested. Provide --title, --parent-thread, --clear-parent-thread, --section, --clear-section, --model, --reasoning-level, --visibility, or --parent-notifications.",
+              "No changes requested. Provide --title, --parent-thread, --clear-parent-thread, --section, --clear-section, --model, --reasoning-level, --visibility, --parent-notifications, or --runtime-recovery.",
             );
           }
 
@@ -221,6 +228,14 @@ export function registerActionsCommands(
             value: opts.parentThread,
           });
           const body: ThreadUpdateBody = {};
+          if (opts.runtimeRecovery !== undefined) {
+            if (
+              opts.runtimeRecovery !== "off" &&
+              opts.runtimeRecovery !== "read-only"
+            )
+              throw new Error("--runtime-recovery must be off or read-only");
+            body.experimental_runtimeRecovery = opts.runtimeRecovery;
+          }
           if (opts.title) {
             body.title = opts.title;
           }

@@ -94,6 +94,8 @@ export interface RecordQueuedMessageWaitArgs {
    * send is queued for the first time.
    */
   claimed: readonly ClaimedQueuedThreadMessageRow[] | null;
+  beforeWrite?: (db: DbQueryConnection) => void;
+  afterWrite?: (db: DbQueryConnection, row: QueuedThreadMessageRow) => void;
 }
 
 /**
@@ -120,8 +122,9 @@ export function recordQueuedMessageWait(
   if (leadClaim === undefined) {
     row = deps.db.transaction(
       (tx) => {
+        args.beforeWrite?.(tx);
         assertThreadHostAcceptsWork(tx, args.thread);
-        return createQueuedThreadMessageInTransaction(tx, {
+        const created = createQueuedThreadMessageInTransaction(tx, {
           threadId: args.thread.id,
           content: args.message.input,
           senderThreadId: args.message.senderThreadId,
@@ -137,19 +140,29 @@ export function recordQueuedMessageWait(
           payload: args.message.payload,
           systemNotice: args.message.systemNotice,
         });
+        args.afterWrite?.(tx, created);
+        return created;
       },
       { behavior: "immediate" },
     );
   } else {
-    row = requeueClaimedQueuedThreadMessages(deps.db, deps.hub, {
-      claims: claimed.map((claim) => ({
-        id: claim.id,
-        claimToken: claim.claimToken,
-      })),
-      threadId: args.thread.id,
-      waitingOn: args.waitingOn,
-      sendAt: args.sendAt,
-    });
+    row = deps.db.transaction(
+      (tx) => {
+        args.beforeWrite?.(tx);
+        const requeued = requeueClaimedQueuedThreadMessages(tx, deps.hub, {
+          claims: claimed.map((claim) => ({
+            id: claim.id,
+            claimToken: claim.claimToken,
+          })),
+          threadId: args.thread.id,
+          waitingOn: args.waitingOn,
+          sendAt: args.sendAt,
+        });
+        if (requeued) args.afterWrite?.(tx, requeued);
+        return requeued;
+      },
+      { behavior: "immediate" },
+    );
   }
 
   if (row === null) {

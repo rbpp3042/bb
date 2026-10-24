@@ -164,10 +164,16 @@ export type QueuedMessagePayloadKind = z.infer<
   typeof queuedMessagePayloadKindSchema
 >;
 
+export const runtimeRecoveryMarkerSchema = z.object({
+  generation: z.number().int(),
+  expectedRequestId: z.string(),
+});
+
 export const queuedMessagePayloadSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("inline") }),
   z.object({
     kind: z.literal("retry"),
+    runtimeRecovery: runtimeRecoveryMarkerSchema.optional(),
     /**
      * The ORIGINAL request, not the attempt that just failed. Retrying a retry
      * re-submits the same original blocks, so this id is carried forward
