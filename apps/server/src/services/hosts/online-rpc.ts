@@ -265,7 +265,8 @@ async function callHostOnlineRpcWithRetry(
   },
 ): Promise<HostDaemonRpcResultForCommand> {
   const retryArgs = (): CallHostOnlineRpcArgs<HostDaemonRpcCommand> =>
-    options.retryCommand !== undefined && args.command.type === "plugin.host.call"
+    options.retryCommand !== undefined &&
+    args.command.type === "plugin.host.call"
       ? { ...args, command: options.retryCommand(args.command) }
       : args;
   const timeoutRetryDeadline =
@@ -381,7 +382,10 @@ function requestHostOnlineRpcResponse(
   ) {
     const id = deps.hub.getDaemonSessionIdForHost(args.hostId);
     const session = id ? getSessionById(deps.db, { sessionId: id }) : null;
-    if (!session || session.protocolVersion < HOST_DAEMON_RUNTIME_RECOVERY_PROTOCOL_VERSION)
+    if (
+      !session ||
+      session.protocolVersion < HOST_DAEMON_RUNTIME_RECOVERY_PROTOCOL_VERSION
+    )
       return Promise.reject(
         new ApiError(
           409,

@@ -41,19 +41,24 @@ export function cancelRuntimeRecoveryForThread(
     },
     timeoutMs: 5000,
   })
-    .then(() => deps.db.transaction(tx => {
-      const host = readRecoveryHost(tx, state.hostId);
-      const current = readRecovery(tx, threadId);
-      if (
-        !state.attempts.some(
-          (a) => a.phase === "dispatching" || a.phase === "unknown",
-        ) &&
-        host.owner === threadId &&
-        current?.mode === "off" &&
-        current.generation === state.generation + 1
-      )
-        writeRecoveryHost(tx, state.hostId, { ...host, owner: null });
-    }, { behavior: "immediate" }))
+    .then(() =>
+      deps.db.transaction(
+        (tx) => {
+          const host = readRecoveryHost(tx, state.hostId);
+          const current = readRecovery(tx, threadId);
+          if (
+            !state.attempts.some(
+              (a) => a.phase === "dispatching" || a.phase === "unknown",
+            ) &&
+            host.owner === threadId &&
+            current?.mode === "off" &&
+            current.generation === state.generation + 1
+          )
+            writeRecoveryHost(tx, state.hostId, { ...host, owner: null });
+        },
+        { behavior: "immediate" },
+      ),
+    )
     .catch((error) =>
       deps.logger.debug(
         { threadId, err: error },

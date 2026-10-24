@@ -86,6 +86,34 @@ function registerDropThenReplaceSocket(args: DropThenReplaceSocketArgs): void {
 }
 
 describe("host online RPC retry semantics", () => {
+  it("rejects runtime recovery before sending to a protocol 252 daemon", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps);
+      harness.db
+        .update(hostDaemonSessions)
+        .set({ protocolVersion: 252 })
+        .where(eq(hostDaemonSessions.id, session.id))
+        .run();
+      const request = vi.spyOn(harness.hub, "requestHostOnlineRpc");
+
+      await expect(
+        callHostOnlineRpc(harness.deps, {
+          hostId: host.id,
+          timeoutMs: 1_000,
+          command: {
+            type: "thread.recovery.inspect",
+            environmentId: "env-recovery",
+            threadId: "thr-recovery",
+          },
+        }),
+      ).rejects.toMatchObject({
+        status: 409,
+        body: { code: "runtime_recovery_upgrade_required" },
+      });
+      expect(request).not.toHaveBeenCalled();
+    });
+  });
+
   it("classifies suspended hosts before sending read-only RPCs", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
